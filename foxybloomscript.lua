@@ -467,7 +467,9 @@ local ok,err=xpcall(function()
     bridge.Destroying:Connect(restore)
     rawset(bridgeEnvironment,STATE_KEY,{frame=bridge,close=function() restore();bridge:Destroy() end})
     corner(bridge,25);make("UIStroke",{Color=C.border,Thickness=2},bridge)
-    make("UIGradient",{Color=ColorSequence.new(Color3.fromRGB(26,24,40),Color3.fromRGB(21,20,32)),Rotation=90},bridge)
+    -- UIGradient multiplies the base background colour; use near-white tints
+    -- rather than dark colours to retain the intended purple background.
+    make("UIGradient",{Color=ColorSequence.new(Color3.fromRGB(255,255,255),Color3.fromRGB(220,218,235)),Rotation=90},bridge)
     make("UISizeConstraint",{MinSize=Vector2.new(560,380),MaxSize=Vector2.new(900,580)},bridge)
     -- UICorner does not mask rectangular children. Draw a rounded sidebar backing
     -- plus a square strip on its inner edge, leaving only the OUTER corners round.
