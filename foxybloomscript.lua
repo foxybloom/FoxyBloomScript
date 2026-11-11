@@ -264,6 +264,7 @@ task.spawn(function()
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local ROOT_NAME = "FoxyBloomLiveBridge"
 local function findOriginal()
@@ -423,6 +424,10 @@ local function button(parent,str,pos,size)
         Size=size,TextColor3=C.white,Font=Enum.Font.GothamMedium,TextSize=15,BorderSizePixel=0},parent)
 end
 local oldMainVisible=main.Visible
+local oldMouseBehavior=UserInputService.MouseBehavior
+local oldMouseIconEnabled=UserInputService.MouseIconEnabled
+local MOUSE_STEP="FoxyBloomMousePolicy"
+local mouseStepBound=false
 local moved,styled,connections,decoration={},{},{},{}
 local restored=false
 local bridge
@@ -437,6 +442,8 @@ end
 local function restore()
     if restored then return end;restored=true
     foxyLegacyHotkeyBlocked=false
+    if mouseStepBound then pcall(function() RunService:UnbindFromRenderStep(MOUSE_STEP) end);mouseStepBound=false end
+    pcall(function() UserInputService.MouseBehavior=oldMouseBehavior;UserInputService.MouseIconEnabled=oldMouseIconEnabled end)
     for _,c in ipairs(connections) do pcall(function() c:Disconnect() end) end
     for _,obj in ipairs(decoration) do pcall(function() obj:Destroy() end) end
     for i=#styled,1,-1 do local v=styled[i];pcall(function() v.obj[v.prop]=v.value end) end
@@ -617,13 +624,28 @@ local ok,err=xpcall(function()
                 obj.TextColor3=arrow and C.pink or C.white;obj.Font=Enum.Font.Gotham
             end
             if (obj:IsA("TextButton") or obj:IsA("TextBox")) and obj.Text~="" and obj.Text~="S"
-                and obj.BackgroundTransparency<0.95 and obj:FindFirstChildWhichIsA("UICorner") then
+                and obj.BackgroundTransparency<0.95 then
                 rememberStyle(obj,"BackgroundColor3");obj.BackgroundColor3=C.selected
+                if not obj:FindFirstChildWhichIsA("UICorner") then table.insert(decoration,corner(obj,6)) end
                 local stroke=obj:FindFirstChildWhichIsA("UIStroke")
                 if stroke then rememberStyle(stroke,"Color");stroke.Color=C.line end
             end
-        elseif obj:IsA("Frame") and obj:FindFirstChildWhichIsA("UIListLayout") and obj.BackgroundTransparency<0.95 then
-            rememberStyle(obj,"BackgroundColor3");obj.BackgroundColor3=C.background
+            -- A blank button with a Frame child is a slider track, not a toggle
+            -- or a colour swatch. Keep its live value/position untouched.
+            if obj:IsA("TextButton") and obj.Text=="" and obj.BackgroundTransparency<0.95 then
+                local fill=obj:FindFirstChildWhichIsA("Frame")
+                if fill and not fill:FindFirstChildWhichIsA("UIListLayout") then
+                    rememberStyle(obj,"BackgroundColor3");obj.BackgroundColor3=C.selected
+                    rememberStyle(fill,"BackgroundColor3");fill.BackgroundColor3=C.pink
+                end
+            end
+        elseif obj:IsA("Frame") and obj.BackgroundTransparency<0.95 then
+            local color=obj.BackgroundColor3
+            local isDark=color.R<0.15 and color.G<0.15 and color.B<0.15
+            local isRow=obj:FindFirstChildWhichIsA("TextLabel") or obj:FindFirstChildWhichIsA("TextButton") or obj:FindFirstChildWhichIsA("UIListLayout")
+            if isDark and isRow and not (obj.Parent and obj.Parent:IsA("GuiButton")) then
+                rememberStyle(obj,"BackgroundColor3");obj.BackgroundColor3=C.sidebar
+            end
         elseif obj:IsA("ScrollingFrame") then
             rememberStyle(obj,"ScrollBarImageColor3");obj.ScrollBarImageColor3=C.border
         end
@@ -635,6 +657,38 @@ local ok,err=xpcall(function()
             task.defer(function() if not restored and obj:IsDescendantOf(root) then pcall(themeElement,obj) end end)
         end))
     end
+    -- Dropdown option menus live beside the old main window, not within the
+    -- moved sections. Style only top-level popup groups with a direct scroller;
+    -- their click callbacks and the original config remain untouched.
+    local themedPopups={}
+    local function themePopup(group)
+        if restored or themedPopups[group] or group==main or not group:IsA("CanvasGroup") then return end
+        local scroll=group:FindFirstChildWhichIsA("ScrollingFrame")
+        if not scroll then return end
+        themedPopups[group]=true
+        rememberStyle(group,"BackgroundColor3");group.BackgroundColor3=C.sidebar
+        for _,node in ipairs(group:GetDescendants()) do
+            if node:IsA("Frame") and node.Parent==group and node.BackgroundTransparency<0.95 then
+                rememberStyle(node,"BackgroundColor3");node.BackgroundColor3=C.sidebar
+                local stroke=node:FindFirstChildWhichIsA("UIStroke")
+                if stroke then rememberStyle(stroke,"Color");stroke.Color=C.border end
+            end
+        end
+        themeTree(scroll)
+        for _,option in ipairs(scroll:GetChildren()) do
+            if option:IsA("TextButton") and option.Text~="" then
+                if option.BackgroundTransparency>=0.95 then
+                    rememberStyle(option,"BackgroundTransparency");option.BackgroundTransparency=0
+                    rememberStyle(option,"BackgroundColor3");option.BackgroundColor3=C.sidebar
+                    if not option:FindFirstChildWhichIsA("UICorner") then table.insert(decoration,corner(option,6)) end
+                end
+            end
+        end
+    end
+    for _,child in ipairs(original:GetChildren()) do themePopup(child) end
+    table.insert(connections,original.ChildAdded:Connect(function(child)
+        task.defer(function() if not restored and child.Parent==original then pcall(themePopup,child) end end)
+    end))
     local count={visual=0,movement=0,combat=0,other=0}
     local function place(section,key)
         local page=pages[key];count[key]=count[key]+1;local base=count[key]*2
@@ -678,6 +732,16 @@ local ok,err=xpcall(function()
         msg.LayoutOrder=1
     end
     main.Visible=false
+    -- Run after the default camera scripts so the cursor can be used while the
+    -- menu is open. Restore the pre-menu mouse state if the bridge is destroyed.
+    RunService:BindToRenderStep(MOUSE_STEP,Enum.RenderPriority.Camera.Value+1,function()
+        if restored or not bridge.Parent then return end
+        pcall(function()
+            UserInputService.MouseBehavior=bridge.Visible and Enum.MouseBehavior.Default or Enum.MouseBehavior.LockCenter
+            UserInputService.MouseIconEnabled=bridge.Visible
+        end)
+    end)
+    mouseStepBound=true
     -- The integrated VM temporarily suspends only its own legacy menu-key handler.
     -- This prevents the old menu from also opening on Home. restore() re-enables it.
     foxyLegacyHotkeyBlocked=true
