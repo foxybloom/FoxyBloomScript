@@ -456,12 +456,18 @@ local function restore()
 end
 local ok,err=xpcall(function()
     bridge=make("Frame",{Name=ROOT_NAME,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),
-        Size=UDim2.new(.84,0,.8,0),BackgroundColor3=C.background,BorderSizePixel=0,ClipsDescendants=true},original)
+        Size=UDim2.new(.72,0,.68,0),BackgroundColor3=C.background,BorderSizePixel=0,ClipsDescendants=true},original)
     bridge.Destroying:Connect(restore)
     rawset(bridgeEnvironment,STATE_KEY,{frame=bridge,close=function() restore();bridge:Destroy() end})
     corner(bridge,25);make("UIStroke",{Color=C.border,Thickness=2},bridge)
-    make("UISizeConstraint",{MinSize=Vector2.new(620,420),MaxSize=Vector2.new(1300,800)},bridge)
-    local side=make("Frame",{Name="Sidebar",Size=UDim2.new(.26,0,1,0),BackgroundColor3=C.sidebar,BorderSizePixel=0},bridge)
+    make("UIGradient",{Color=ColorSequence.new(Color3.fromRGB(26,24,40),Color3.fromRGB(21,20,32)),Rotation=90},bridge)
+    make("UISizeConstraint",{MinSize=Vector2.new(560,380),MaxSize=Vector2.new(900,580)},bridge)
+    -- UICorner does not mask rectangular children. Draw a rounded sidebar backing
+    -- plus a square strip on its inner edge, leaving only the OUTER corners round.
+    local side=make("Frame",{Name="Sidebar",Size=UDim2.new(.26,0,1,0),BackgroundTransparency=1,BorderSizePixel=0},bridge)
+    local sideBacking=make("Frame",{Name="RoundedBackground",Size=UDim2.fromScale(1,1),BackgroundColor3=C.sidebar,BorderSizePixel=0},side)
+    corner(sideBacking,25)
+    make("Frame",{Name="InnerEdge",Position=UDim2.new(1,-25,0,0),Size=UDim2.new(0,25,1,0),BackgroundColor3=C.sidebar,BorderSizePixel=0},side)
     -- The fox is drawn from Roblox GUI shapes: no external image asset is required.
     local logo=make("Frame",{Name="FoxLogo",AnchorPoint=Vector2.new(.5,0),Position=UDim2.new(.5,0,0,18),
         Size=UDim2.fromOffset(64,46),BackgroundTransparency=1},side)
@@ -498,7 +504,9 @@ local ok,err=xpcall(function()
         if success and avatar.Parent then avatar.Image=image end
     end)
     local content=make("Frame",{Position=UDim2.new(.26,0,0,0),Size=UDim2.new(.74,0,1,0),BackgroundTransparency=1},bridge)
-    local title=text(content,"✿  Главная",UDim2.new(0,34,0,20),UDim2.new(1,-110,0,50),30,C.white,Enum.Font.GothamBold)
+    local petal=make("Frame",{Position=UDim2.fromOffset(35,35),Size=UDim2.fromOffset(24,14),BackgroundColor3=C.pink,Rotation=28,BorderSizePixel=0},content);corner(petal,8)
+    local petal2=make("Frame",{Position=UDim2.fromOffset(43,27),Size=UDim2.fromOffset(14,23),BackgroundColor3=C.border,Rotation=-23,BorderSizePixel=0},content);corner(petal2,8)
+    local title=text(content,"Главная",UDim2.new(0,68,0,20),UDim2.new(1,-144,0,50),26,C.white,Enum.Font.GothamBold)
     local hearts=text(content,"♥",UDim2.new(1,-88,0,27),UDim2.fromOffset(26,28),17,C.pink,Enum.Font.GothamBold)
     hearts.Rotation=-18
     make("Frame",{Position=UDim2.new(0,34,0,77),Size=UDim2.new(1,-68,0,2),BackgroundColor3=C.line,BorderSizePixel=0},content)
@@ -527,7 +535,34 @@ local ok,err=xpcall(function()
         {key="other",name="Другие",icon="◇"}, {key="settings",name="Настройки",icon="⚙"},
         {key="profile",name="Профиль",icon="☺",hidden=true},
     }
-    local pages,navs={},{}
+    local pages,navs,navIcons,navTexts={},{},{},{}
+    local function recolorIcon(key,color)
+        for _,part in ipairs(navIcons[key] or {}) do
+            if part:IsA("UIStroke") then part.Color=color else part.BackgroundColor3=color end
+        end
+    end
+    local function buildIcon(parent,key)
+        local holder=make("Frame",{Name="Icon",Position=UDim2.fromOffset(13,12),Size=UDim2.fromOffset(20,20),BackgroundTransparency=1},parent)
+        local parts={};navIcons[key]=parts
+        local function piece(x,y,w,h,rotation,r)
+            local f=make("Frame",{Position=UDim2.fromOffset(x,y),Size=UDim2.fromOffset(w,h),Rotation=rotation or 0,BackgroundColor3=C.muted,BorderSizePixel=0},holder)
+            if r then corner(f,r) end;table.insert(parts,f);return f
+        end
+        if key=="home" then
+            piece(2,4,11,3,-42,2);piece(8,4,11,3,42,2);piece(5,9,11,9,0,2)
+        elseif key=="visual" or key=="combat" or key=="settings" then
+            local ring=make("Frame",{Position=UDim2.fromOffset(2,2),Size=UDim2.fromOffset(16,16),BackgroundTransparency=1,BorderSizePixel=0},holder)
+            corner(ring,key=="visual" and 7 or 9)
+            local stroke=make("UIStroke",{Color=C.muted,Thickness=2},ring);table.insert(parts,stroke)
+            piece(8,8,4,4,0,2)
+            if key=="settings" then piece(9,0,2,5,0,1);piece(9,15,2,5,0,1);piece(0,9,5,2,0,1);piece(15,9,5,2,0,1) end
+        elseif key=="movement" then
+            piece(3,5,12,3,35,2);piece(3,12,12,3,-35,2)
+        else
+            local diamond=piece(5,5,10,10,45,2);diamond.BackgroundTransparency=1
+            local stroke=make("UIStroke",{Color=C.muted,Thickness=2},diamond);table.insert(parts,stroke)
+        end
+    end
     for i,info in ipairs(pageInfo) do
         local page=make("ScrollingFrame",{Name="Page_"..info.key,Size=UDim2.fromScale(1,1),Visible=false,
             BackgroundTransparency=1,BorderSizePixel=0,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,
@@ -536,14 +571,16 @@ local ok,err=xpcall(function()
         make("UIPadding",{PaddingRight=UDim.new(0,10),PaddingBottom=UDim.new(0,12)},page)
         pages[info.key]=page
         if not info.hidden then
-            local navbtn=make("TextButton",{LayoutOrder=i,Size=UDim2.new(1,0,0,50),BackgroundColor3=C.sidebar,
-                Text=info.icon.."   "..info.name,TextColor3=C.muted,Font=Enum.Font.GothamBold,TextSize=15,
-                TextXAlignment=Enum.TextXAlignment.Left,AutoButtonColor=false,BorderSizePixel=0},nav)
-            corner(navbtn,16);make("UIPadding",{PaddingLeft=UDim.new(0,17)},navbtn);navs[info.key]=navbtn
+            local navbtn=make("TextButton",{LayoutOrder=i,Size=UDim2.new(1,0,0,44),BackgroundColor3=C.sidebar,
+                Text="",AutoButtonColor=false,BorderSizePixel=0},nav)
+            corner(navbtn,14);navs[info.key]=navbtn
+            local navLabel=text(navbtn,info.name,UDim2.fromOffset(42,0),UDim2.new(1,-48,1,0),13,C.muted,Enum.Font.GothamBold)
+            navTexts[info.key]=navLabel
+            buildIcon(navbtn,info.key)
             navbtn.MouseButton1Click:Connect(function()
                 for _,p in pairs(pages) do p.Visible=false end
-                for _,b in pairs(navs) do b.BackgroundColor3=C.sidebar;b.TextColor3=C.muted end
-                page.Visible=true;navbtn.BackgroundColor3=C.selected;navbtn.TextColor3=C.pink;title.Text="✿  "..info.name
+                for k,b in pairs(navs) do b.BackgroundColor3=C.sidebar;navTexts[k].TextColor3=C.muted;recolorIcon(k,C.muted) end
+                page.Visible=true;navbtn.BackgroundColor3=C.selected;navTexts[info.key].TextColor3=C.pink;recolorIcon(info.key,C.pink);title.Text=info.name
             end)
         end
     end
@@ -564,15 +601,47 @@ local ok,err=xpcall(function()
     end)
     profileButton.MouseButton1Click:Connect(function()
         for _,p in pairs(pages) do p.Visible=false end
-        for _,b in pairs(navs) do b.BackgroundColor3=C.sidebar;b.TextColor3=C.muted end
-        pages.profile.Visible=true;title.Text="✿  Профиль"
+        for k,b in pairs(navs) do b.BackgroundColor3=C.sidebar;navTexts[k].TextColor3=C.muted;recolorIcon(k,C.muted) end
+        pages.profile.Visible=true;title.Text="Профиль"
     end)
+    -- Apply the palette to the original controls without replacing them or
+    -- touching colour swatches / switch backgrounds that carry live state.
+    local themed={}
+    local function themeElement(obj)
+        if restored or themed[obj] then return end
+        themed[obj]=true
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            if obj.Text~="" then
+                rememberStyle(obj,"TextColor3");rememberStyle(obj,"Font")
+                local arrow=obj.Text=="▶" or obj.Text=="▼" or obj.Text=="▸" or obj.Text=="▾"
+                obj.TextColor3=arrow and C.pink or C.white;obj.Font=Enum.Font.Gotham
+            end
+            if (obj:IsA("TextButton") or obj:IsA("TextBox")) and obj.Text~="" and obj.Text~="S"
+                and obj.BackgroundTransparency<0.95 and obj:FindFirstChildWhichIsA("UICorner") then
+                rememberStyle(obj,"BackgroundColor3");obj.BackgroundColor3=C.selected
+                local stroke=obj:FindFirstChildWhichIsA("UIStroke")
+                if stroke then rememberStyle(stroke,"Color");stroke.Color=C.line end
+            end
+        elseif obj:IsA("Frame") and obj:FindFirstChildWhichIsA("UIListLayout") and obj.BackgroundTransparency<0.95 then
+            rememberStyle(obj,"BackgroundColor3");obj.BackgroundColor3=C.background
+        elseif obj:IsA("ScrollingFrame") then
+            rememberStyle(obj,"ScrollBarImageColor3");obj.ScrollBarImageColor3=C.border
+        end
+    end
+    local function themeTree(root)
+        themeElement(root)
+        for _,obj in ipairs(root:GetDescendants()) do themeElement(obj) end
+        table.insert(connections,root.DescendantAdded:Connect(function(obj)
+            task.defer(function() if not restored and obj:IsDescendantOf(root) then pcall(themeElement,obj) end end)
+        end))
+    end
     local count={visual=0,movement=0,combat=0,other=0}
     local function place(section,key)
         local page=pages[key];count[key]=count[key]+1;local base=count[key]*2
         remember(section.head);remember(section.body)
         section.head.LayoutOrder=base;section.body.LayoutOrder=base+1
         section.head.Parent=page;section.body.Parent=page
+        themeTree(section.body)
         -- Preserve the actual controls and their event handlers. The large headings
         -- open the original expandable groups; existing switches keep their state.
         rememberStyle(section.head,"BackgroundTransparency")
@@ -603,6 +672,7 @@ local ok,err=xpcall(function()
     if settings then
         remember(settings);settings.Parent=pages.settings;settings.Size=UDim2.new(1,-8,0,360)
         settings.Position=UDim2.fromOffset(0,0);settings.LayoutOrder=1;settings.Visible=true
+        themeTree(settings)
     else
         local msg=text(pages.settings,"Настройки исходного меню не найдены.",UDim2.fromOffset(0,0),UDim2.new(1,0,0,60),14,C.muted)
         msg.LayoutOrder=1
@@ -611,7 +681,7 @@ local ok,err=xpcall(function()
     -- The integrated VM temporarily suspends only its own legacy menu-key handler.
     -- This prevents the old menu from also opening on Home. restore() re-enables it.
     foxyLegacyHotkeyBlocked=true
-    pages.home.Visible=true;navs.home.BackgroundColor3=C.selected;navs.home.TextColor3=C.pink
+    pages.home.Visible=true;navs.home.BackgroundColor3=C.selected;navTexts.home.TextColor3=C.pink;recolorIcon("home",C.pink)
     table.insert(connections,UserInputService.InputBegan:Connect(function(input,processed)
         if input.UserInputType~=Enum.UserInputType.Keyboard then return end
         if awaitingKey then
