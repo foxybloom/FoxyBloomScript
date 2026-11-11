@@ -461,17 +461,35 @@ local ok,err=xpcall(function()
     rawset(bridgeEnvironment,STATE_KEY,{frame=bridge,close=function() restore();bridge:Destroy() end})
     corner(bridge,25);make("UIStroke",{Color=C.border,Thickness=2},bridge)
     make("UISizeConstraint",{MinSize=Vector2.new(620,420),MaxSize=Vector2.new(1300,800)},bridge)
-    local side=make("Frame",{Name="Sidebar",Size=UDim2.new(.25,0,1,0),BackgroundColor3=C.sidebar,BorderSizePixel=0},bridge)
-    text(side,"✿",UDim2.fromOffset(24,22),UDim2.fromOffset(36,36),27,C.pink,Enum.Font.GothamBold)
-    text(side,"Foxy Bloom",UDim2.fromOffset(60,24),UDim2.new(1,-70,0,32),20,C.white,Enum.Font.GothamBold)
-    make("Frame",{Position=UDim2.new(0,24,0,78),Size=UDim2.new(1,-48,0,1),BackgroundColor3=C.line,BorderSizePixel=0},side)
-    local nav=make("ScrollingFrame",{Position=UDim2.new(0,12,0,96),Size=UDim2.new(1,-24,1,-205),
+    local side=make("Frame",{Name="Sidebar",Size=UDim2.new(.26,0,1,0),BackgroundColor3=C.sidebar,BorderSizePixel=0},bridge)
+    -- The fox is drawn from Roblox GUI shapes: no external image asset is required.
+    local logo=make("Frame",{Name="FoxLogo",AnchorPoint=Vector2.new(.5,0),Position=UDim2.new(.5,0,0,18),
+        Size=UDim2.fromOffset(64,46),BackgroundTransparency=1},side)
+    local function foxPart(pos,size,color,rotation,radius,z)
+        local part=make("Frame",{Position=pos,Size=size,BackgroundColor3=color,BorderSizePixel=0,
+            Rotation=rotation or 0,ZIndex=z or 2},logo);corner(part,radius or 12);return part
+    end
+    foxPart(UDim2.fromOffset(8,1),UDim2.fromOffset(22,29),C.pink,-20,6,2)
+    foxPart(UDim2.fromOffset(34,1),UDim2.fromOffset(22,29),C.pink,20,6,2)
+    foxPart(UDim2.fromOffset(14,6),UDim2.fromOffset(11,20),Color3.fromRGB(255,215,214),-20,5,3)
+    foxPart(UDim2.fromOffset(39,6),UDim2.fromOffset(11,20),Color3.fromRGB(255,215,214),20,5,3)
+    foxPart(UDim2.fromOffset(5,13),UDim2.fromOffset(54,31),C.pink,0,16,3)
+    foxPart(UDim2.fromOffset(11,27),UDim2.fromOffset(42,18),Color3.fromRGB(255,227,222),0,12,4)
+    foxPart(UDim2.fromOffset(20,28),UDim2.fromOffset(5,5),Color3.fromRGB(46,32,45),0,3,5)
+    foxPart(UDim2.fromOffset(39,28),UDim2.fromOffset(5,5),Color3.fromRGB(46,32,45),0,3,5)
+    foxPart(UDim2.fromOffset(30,35),UDim2.fromOffset(5,4),Color3.fromRGB(46,32,45),0,3,5)
+    local brand=text(side,"Foxy Bloom",UDim2.new(0,8,0,66),UDim2.new(1,-16,0,30),20,C.white,Enum.Font.GothamBold)
+    brand.TextXAlignment=Enum.TextXAlignment.Center
+    text(side,"♥",UDim2.new(.5,-58,0,31),UDim2.fromOffset(18,18),15,C.border,Enum.Font.GothamBold)
+    text(side,"♥",UDim2.new(.5,41,0,31),UDim2.fromOffset(18,18),15,C.border,Enum.Font.GothamBold)
+    make("Frame",{Position=UDim2.new(0,24,0,105),Size=UDim2.new(1,-48,0,2),BackgroundColor3=C.line,BorderSizePixel=0},side)
+    local nav=make("ScrollingFrame",{Position=UDim2.new(0,12,0,120),Size=UDim2.new(1,-24,1,-224),
         BackgroundTransparency=1,BorderSizePixel=0,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,
         ScrollBarThickness=3,ScrollBarImageColor3=C.border},side)
-    make("UIListLayout",{SortOrder=Enum.SortOrder.LayoutOrder,Padding=UDim.new(0,6)},nav)
-    make("Frame",{Position=UDim2.new(0,24,1,-97),Size=UDim2.new(1,-48,0,1),BackgroundColor3=C.line,BorderSizePixel=0},side)
+    make("UIListLayout",{SortOrder=Enum.SortOrder.LayoutOrder,Padding=UDim.new(0,7)},nav)
+    make("Frame",{Position=UDim2.new(0,24,1,-97),Size=UDim2.new(1,-48,0,2),BackgroundColor3=C.line,BorderSizePixel=0},side)
     local avatar=make("ImageLabel",{Position=UDim2.new(0,24,1,-78),Size=UDim2.fromOffset(50,50),
-        BackgroundColor3=C.line,Image="",BorderSizePixel=0},side);corner(avatar,25);make("UIStroke",{Color=C.white,Thickness=1},avatar)
+        BackgroundColor3=C.line,Image="",BorderSizePixel=0},side);corner(avatar,25);make("UIStroke",{Color=C.white,Thickness=2},avatar)
     text(side,player.DisplayName,UDim2.new(0,84,1,-75),UDim2.new(1,-94,0,27),16,C.white,Enum.Font.GothamBold)
     text(side,"@"..player.Name,UDim2.new(0,84,1,-49),UDim2.new(1,-94,0,18),11,C.muted)
     local profileButton=button(side,"",UDim2.new(0,12,1,-90),UDim2.new(1,-24,0,80));profileButton.ZIndex=4
@@ -479,9 +497,11 @@ local ok,err=xpcall(function()
         local success,image=pcall(function() return Players:GetUserThumbnailAsync(player.UserId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size100x100) end)
         if success and avatar.Parent then avatar.Image=image end
     end)
-    local content=make("Frame",{Position=UDim2.new(.25,0,0,0),Size=UDim2.new(.75,0,1,0),BackgroundTransparency=1},bridge)
-    local title=text(content,"✿  Главная",UDim2.new(0,34,0,20),UDim2.new(1,-88,0,50),30,C.white,Enum.Font.GothamBold)
-    make("Frame",{Position=UDim2.new(0,34,0,77),Size=UDim2.new(1,-68,0,1),BackgroundColor3=C.line,BorderSizePixel=0},content)
+    local content=make("Frame",{Position=UDim2.new(.26,0,0,0),Size=UDim2.new(.74,0,1,0),BackgroundTransparency=1},bridge)
+    local title=text(content,"✿  Главная",UDim2.new(0,34,0,20),UDim2.new(1,-110,0,50),30,C.white,Enum.Font.GothamBold)
+    local hearts=text(content,"♥",UDim2.new(1,-88,0,27),UDim2.fromOffset(26,28),17,C.pink,Enum.Font.GothamBold)
+    hearts.Rotation=-18
+    make("Frame",{Position=UDim2.new(0,34,0,77),Size=UDim2.new(1,-68,0,2),BackgroundColor3=C.line,BorderSizePixel=0},content)
     local close=button(content,"×",UDim2.new(1,-50,0,20),UDim2.fromOffset(30,30));close.TextSize=26;close.TextColor3=C.muted;close.ZIndex=4
     close.MouseButton1Click:Connect(function() restore();bridge:Destroy() end)
     local dragArea=button(content,"",UDim2.fromOffset(0,0),UDim2.new(1,-55,0,78));dragArea.ZIndex=3
@@ -516,10 +536,10 @@ local ok,err=xpcall(function()
         make("UIPadding",{PaddingRight=UDim.new(0,10),PaddingBottom=UDim.new(0,12)},page)
         pages[info.key]=page
         if not info.hidden then
-            local navbtn=make("TextButton",{LayoutOrder=i,Size=UDim2.new(1,0,0,44),BackgroundColor3=C.sidebar,
+            local navbtn=make("TextButton",{LayoutOrder=i,Size=UDim2.new(1,0,0,50),BackgroundColor3=C.sidebar,
                 Text=info.icon.."   "..info.name,TextColor3=C.muted,Font=Enum.Font.GothamBold,TextSize=15,
                 TextXAlignment=Enum.TextXAlignment.Left,AutoButtonColor=false,BorderSizePixel=0},nav)
-            corner(navbtn,12);make("UIPadding",{PaddingLeft=UDim.new(0,15)},navbtn);navs[info.key]=navbtn
+            corner(navbtn,16);make("UIPadding",{PaddingLeft=UDim.new(0,17)},navbtn);navs[info.key]=navbtn
             navbtn.MouseButton1Click:Connect(function()
                 for _,p in pairs(pages) do p.Visible=false end
                 for _,b in pairs(navs) do b.BackgroundColor3=C.sidebar;b.TextColor3=C.muted end
@@ -553,15 +573,25 @@ local ok,err=xpcall(function()
         remember(section.head);remember(section.body)
         section.head.LayoutOrder=base;section.body.LayoutOrder=base+1
         section.head.Parent=page;section.body.Parent=page
-        -- Only style the static header; don't recolor live state indicators.
-        rememberStyle(section.head,"BackgroundColor3");rememberStyle(section.head,"BackgroundTransparency")
-        section.head.BackgroundColor3=C.selected;section.head.BackgroundTransparency=0.15
-        if not section.head:FindFirstChildWhichIsA("UICorner") then table.insert(decoration,corner(section.head,9)) end
+        -- Preserve the actual controls and their event handlers. The large headings
+        -- open the original expandable groups; existing switches keep their state.
+        rememberStyle(section.head,"BackgroundTransparency")
+        section.head.BackgroundTransparency=1
+        section.head.Size=UDim2.new(1,-8,0,62)
         for _,child in ipairs(section.head:GetChildren()) do
             if child:IsA("TextLabel") then
-                rememberStyle(child,"TextColor3");child.TextColor3=C.white
+                for _,prop in ipairs({"TextColor3","TextSize","Font","Position","Size","TextXAlignment"}) do rememberStyle(child,prop) end
+                local isArrow=child.Text=="▶" or child.Text=="▼" or child.Text=="▸" or child.Text=="▾"
+                child.TextColor3=isArrow and C.pink or C.white
+                child.TextSize=isArrow and 16 or 19;child.Font=Enum.Font.GothamBold
+                child.Position=isArrow and UDim2.new(1,-30,0,12) or UDim2.fromOffset(8,6)
+                child.Size=isArrow and UDim2.fromOffset(22,30) or UDim2.new(1,-55,0,27)
+                child.TextXAlignment=isArrow and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
             end
         end
+        local hint=text(section.head,"Нажмите, чтобы открыть функции и настройки",UDim2.fromOffset(8,35),
+            UDim2.new(1,-48,0,18),12,C.muted)
+        table.insert(decoration,hint)
     end
     for _,section in ipairs(vSections) do place(section,"visual") end
     for _,section in ipairs(mSections) do
