@@ -1,3 +1,4 @@
+-- FOXY BLOOM EXPERIMENTAL: NEW VM. NOT VERIFIED IN ROBLOX.
 -- FOXY BLOOM INTEGRATED: profile-configurable menu key (default Home).
 -- Experimental UI bridge; original virtualized program is unchanged.
 -- READABILITY PASS: decoded bootstrap strings, descriptive VM variable names.
@@ -69,188 +70,152 @@ local foxyLegacyHotkeyBlocked = false
 decoded = nil
 local function unused_zero(_) return 0 end
 local function get_constant(constants, _, index, ignored) return constants[index] end
+-- Foxy Bloom VM: named opcode dispatch, replacing the previous dispatcher.
+-- This still interprets the original virtual instruction data.
+-- The caller supplies environment, pack_values, unpack_values and the hook nodes.
 local execute_vm
-local function make_closure(vm_function,upvalues)
-return function(...) return execute_vm(vm_function,upvalues,pack_values(...)) end
+local function make_closure(node, captured)
+    return function(...)
+        return execute_vm(node, captured, pack_values(...))
+    end
 end
-execute_vm=function(vm_function,upvalues,arguments)
-if vm_function == customSessionNode then return customAuthorization() end
-if vm_function == legacyMenuHotkeyNode and foxyLegacyHotkeyBlocked then return end
-local registers={}
-local noise_counter=0
-local parameter_count=vm_function[1]
-local argument_count=arguments.n
-for register_index=1,parameter_count do registers[register_index-1]=arguments[register_index] end
-local varargs,vararg_count={},0
-if vm_function[2]==1 then vararg_count=argument_count-parameter_count; if vararg_count<0 then vararg_count=0 end; for register_index=1,vararg_count do varargs[register_index]=arguments[parameter_count+register_index] end end
-local instructions,constants,children=vm_function[3],vm_function[4],vm_function[5]
-local reserved_data=vm_function[7]
-local instruction_pointer=1
-local stack_top=0
-while true do
-local instruction=instructions[instruction_pointer]
-if instruction==nil then raise_error("VM invalid instruction address",0) end
-instruction_pointer=instruction_pointer+1
-local register_index=instruction[1]
-local opcode=instruction[2]
-local operand_b=instruction[3]
-local operand_c=instruction[4]
-if (instruction_pointer*instruction_pointer+instruction_pointer)%2~=0 then noise_counter=noise_counter+5 end
-if (opcode*opcode)%4==2 then noise_counter=noise_counter+6 end
-if (instruction_pointer%2)*(instruction_pointer%2)-(instruction_pointer%2)~=0 then noise_counter=noise_counter+4 end
-if (opcode*opcode+opcode)%2==1 then noise_counter=noise_counter-7 end
-if opcode==11 then
-local temporary_a,temporary_b=registers[operand_b],registers[operand_c];registers[register_index]=temporary_a*temporary_b
-elseif opcode==38 then
-local temporary_b=registers[register_index]
-local iterator_state=registers[register_index+1]
-local iterator_control=registers[register_index+2]
-local packed_results=pack_values(temporary_b(iterator_state,iterator_control))
-local first_result=packed_results[1]
-if first_result~=nil then
-registers[register_index+2]=first_result
-for temporary_a=1,operand_b do registers[register_index+3+temporary_a-1]=packed_results[temporary_a] end
-instruction_pointer=operand_c+1
+local OPCODE = {}
+-- Each handler receives one frame and the already-decoded A/B/C operands.
+OPCODE[1]=function(s,a,b,c) s.r[a]={s.r[b]} end
+OPCODE[2]=function(s,a,b,c) for i=a,a+b do s.r[i]=nil end end
+OPCODE[3]=function(s,a,b,c)
+    local n=b==0 and (s.top-a) or (b-1)
+    local values={};for i=1,n do values[i]=s.r[a+i-1] end
+    s.results=pack_values(unpack_values(values,1,n));s.done=true
 end
-elseif opcode==41 then
-for temporary_a=register_index,register_index+2 do
-registers[temporary_a]=to_number(registers[temporary_a])
-if registers[temporary_a]==nil then raise_error("Numeric for bounds and step must be numbers",0) end
+OPCODE[4]=function(s,a,b,c) s.r[a]=s.r[b]>s.r[c] end
+OPCODE[5]=function(s,a,b,c) s.r[a]=s.r[b]<=s.r[c] end
+OPCODE[6]=function(s,a,b,c) if (not not s.r[a])==(b~=0) then s.pc=c+1 end end
+OPCODE[7]=function(s,a,b,c) s.r[a]=s.r[b]>=s.r[c] end
+OPCODE[8]=function(s,a,b,c) s.r[a]=environment[s.constants[b+1]] end
+OPCODE[9]=function(s,a,b,c) s.r[a]=s.r[b]%s.r[c] end
+OPCODE[10]=function(s,a,b,c) s.r[a]={} end
+OPCODE[11]=function(s,a,b,c) s.r[a]=s.r[b]*s.r[c] end
+OPCODE[12]=function(s,a,b,c) environment[s.constants[b+1]]=s.r[a] end
+OPCODE[13]=function(s,a,b,c) s.r[a]=-s.r[b] end
+OPCODE[14]=function(s,a,b,c) s.r[a]=s.r[b]+s.r[c] end
+OPCODE[15]=function(s,a,b,c) s.r[a]=s.r[b]-s.r[c] end
+OPCODE[16]=function(s,a,b,c) s.r[a+1]=s.r[b];s.r[a]=s.r[b][s.r[c]] end
+OPCODE[17]=function(s,a,b,c) s.r[a]=s.r[b]/s.r[c] end
+OPCODE[18]=function(s,a,b,c) s.noise=(s.noise+b)%(c+1) end
+OPCODE[19]=function(s,a,b,c) s.r[a]=s.r[b][1] end
+OPCODE[20]=function(s,a,b,c) s.r[a]=#s.r[b] end
+OPCODE[21]=function(s,a,b,c)
+    local child=s.children[b+1]
+    local captured={};local descriptors=child[6]
+    for i=1,#descriptors do
+        local desc=descriptors[i]
+        if desc[1]==1 then captured[i]=s.r[desc[2]] else captured[i]=s.upvalues[desc[2]+1] end
+    end
+    s.r[a]=make_closure(child,captured)
 end
-local temporary_b=registers[register_index+2]
-local temporary_c
-if temporary_b>0 then temporary_c=registers[register_index]<=registers[register_index+1] else temporary_c=registers[register_index]>=registers[register_index+1] end
-if temporary_c then registers[register_index+3]=registers[register_index] else instruction_pointer=operand_b+1 end
-elseif opcode==32 then
-registers[register_index]=get_constant(constants,reserved_data,operand_b+1,unused_zero(vm_function))
-elseif opcode==1 then
-registers[register_index]={registers[operand_b]}
-elseif opcode==44 then
-local temporary_a,temporary_b,temporary_c=registers[register_index],registers[operand_b],registers[operand_c];temporary_a[temporary_b]=temporary_c
-elseif opcode==24 then
-registers[register_index]=registers[operand_b][registers[operand_c]]
-elseif opcode==29 then
-local temporary_a,temporary_b=registers[operand_b],registers[operand_c];registers[register_index]=temporary_a//temporary_b
-elseif opcode==21 then
-local temporary_b=children[operand_b+1]
-local temporary_table={}
-local packed_results=temporary_b[6]
-for temporary_a=1,#packed_results do
-local first_result=packed_results[temporary_a]
-if first_result[1]==1 then temporary_table[temporary_a]=registers[first_result[2]] else temporary_table[temporary_a]=upvalues[first_result[2]+1] end
+OPCODE[22]=function(s,a,b,c) s.upvalues[b+1][1]=s.r[a] end
+OPCODE[23]=function(s,a,b,c) s.r[a]=(s.r[b]~=s.r[c]) end
+OPCODE[24]=function(s,a,b,c) s.r[a]=s.r[b][s.r[c]] end
+OPCODE[25]=function(s,a,b,c) s.r[b][1]=s.r[a] end
+OPCODE[26]=function(s,a,b,c) s.r[a]=s.r[b]..s.r[c] end
+OPCODE[27]=function(s,a,b,c) s.r[a]=not s.r[b] end
+OPCODE[28]=function(s,a,b,c) s.r[a]=s.r[b]^s.r[c] end
+OPCODE[29]=function(s,a,b,c) s.r[a]=s.r[b]//s.r[c] end
+OPCODE[30]=function(s,a,b,c) s.r[a]=s.r[b] end
+OPCODE[31]=function(s,a,b,c) s.r[a]=(s.r[b]==s.r[c]) end
+OPCODE[32]=function(s,a,b,c) s.r[a]=s.constants[b+1] end
+OPCODE[33]=function(s,a,b,c) s.r[a]=(b~=0) end
+OPCODE[34]=function(s,a,b,c)
+    if b==0 then
+        for i=1,s.vararg_count do s.r[a+i-1]=s.varargs[i] end
+        s.top=a+s.vararg_count
+    else
+        for i=1,b-1 do s.r[a+i-1]=s.varargs[i] end
+    end
 end
-registers[register_index]=make_closure(temporary_b,temporary_table)
-elseif opcode==14 then
-local temporary_a,temporary_b=registers[operand_b],registers[operand_c];registers[register_index]=temporary_a+temporary_b
-elseif opcode==30 then
-registers[register_index]=registers[operand_b]
-elseif opcode==37 then
-registers[register_index]=(registers[operand_b]<registers[operand_c])
-elseif opcode==9 then
-registers[register_index]=registers[operand_b]%registers[operand_c]
-elseif opcode==27 then
-registers[register_index]=not registers[operand_b]
-elseif opcode==33 then
-registers[register_index]=(operand_b~=0)
-elseif opcode==6 then
-if (not not registers[register_index])==(operand_b~=0) then instruction_pointer=operand_c+1 end
-elseif opcode==15 then
-registers[register_index]=registers[operand_b]-registers[operand_c]
-elseif opcode==16 then
-registers[register_index+1]=registers[operand_b]; registers[register_index]=registers[operand_b][registers[operand_c]]
-elseif opcode==8 then
-registers[register_index]=environment[get_constant(constants,reserved_data,operand_b+1,unused_zero(vm_function))]
-elseif opcode==22 then
-upvalues[operand_b+1][1]=registers[register_index]
-elseif opcode==28 then
-local temporary_a,temporary_b=registers[operand_b],registers[operand_c];registers[register_index]=temporary_a^temporary_b
-elseif opcode==13 then
-registers[register_index]=-registers[operand_b]
-elseif opcode==34 then
-if operand_b==0 then
-for temporary_a=1,vararg_count do registers[register_index+temporary_a-1]=varargs[temporary_a] end
-stack_top=register_index+vararg_count
-else
-for temporary_a=1,operand_b-1 do registers[register_index+temporary_a-1]=varargs[temporary_a] end
+OPCODE[35]=function(s,a,b,c)
+    local fn=s.r[a]
+    local n=b==0 and (s.top-a-1) or (b-1)
+    local args={};for i=1,n do args[i]=s.r[a+i] end
+    local results=pack_values(fn(unpack_values(args,1,n)))
+    if c==0 then
+        for i=1,results.n do s.r[a+i-1]=results[i] end
+        s.top=a+results.n
+    else
+        for i=1,c-1 do s.r[a+i-1]=results[i] end
+    end
 end
-elseif opcode==23 then
-local temporary_a,temporary_b=registers[operand_b],registers[operand_c];registers[register_index]=(temporary_a~=temporary_b)
-elseif opcode==3 then
-local temporary_c
-if operand_b==0 then temporary_c=stack_top-register_index else temporary_c=operand_b-1 end
-local temporary_table={}
-for temporary_a=1,temporary_c do temporary_table[temporary_a]=registers[register_index+temporary_a-1] end
-return unpack_values(temporary_table,1,temporary_c)
-elseif opcode==17 then
-registers[register_index]=registers[operand_b]/registers[operand_c]
-elseif opcode==20 then
-registers[register_index]=#registers[operand_b]
-elseif opcode==12 then
-environment[get_constant(constants,reserved_data,operand_b+1,unused_zero(vm_function))]=registers[register_index]
-elseif opcode==5 then
-local temporary_a,temporary_b=registers[operand_b],registers[operand_c];registers[register_index]=(temporary_a<=temporary_b)
-elseif opcode==19 then
-registers[register_index]=registers[operand_b][1]
-elseif opcode==2 then
-for temporary_a=register_index,register_index+operand_b do registers[temporary_a]=nil end
-elseif opcode==42 then
-registers[register_index]=registers[register_index]+registers[register_index+2]
-local temporary_b=registers[register_index+2]
-local temporary_c
-if temporary_b>0 then temporary_c=registers[register_index]<=registers[register_index+1] else temporary_c=registers[register_index]>=registers[register_index+1] end
-if temporary_c then registers[register_index+3]=registers[register_index]; instruction_pointer=operand_b+1 end
-elseif opcode==31 then
-local temporary_a,temporary_b=registers[operand_b],registers[operand_c];registers[register_index]=(temporary_a==temporary_b)
-elseif opcode==39 then
-instruction_pointer=operand_b+1
-elseif opcode==26 then
-registers[register_index]=registers[operand_b]..registers[operand_c]
-elseif opcode==7 then
-local temporary_a,temporary_b=registers[operand_b],registers[operand_c];registers[register_index]=(temporary_a>=temporary_b)
-elseif opcode==43 then
-local temporary_a=registers[register_index]
-if value_type(temporary_a)~=function_type_name then
-local temporary_b=get_metatable(temporary_a)
-if temporary_b~=nil and value_type(temporary_b)~=table_type_name then raise_error("Protected iterator metatables require an explicit iterator function",0) end
-local temporary_c=temporary_b and raw_get(temporary_b,iter_metamethod_name)
-if temporary_c~=nil then
-registers[register_index],registers[register_index+1],registers[register_index+2]=temporary_c(temporary_a)
-elseif value_type(temporary_a)==table_type_name and (temporary_b==nil or raw_get(temporary_b,call_metamethod_name)==nil) then
-registers[register_index],registers[register_index+1],registers[register_index+2]=next_entry,temporary_a,nil
+OPCODE[36]=function(s,a,b,c)
+    local n=b==0 and (s.top-a-1) or b
+    local dst=s.r[a];for i=1,n do dst[c+i]=s.r[a+i] end
 end
+OPCODE[37]=function(s,a,b,c) s.r[a]=s.r[b]<s.r[c] end
+OPCODE[38]=function(s,a,b,c)
+    local iterator,state,control=s.r[a],s.r[a+1],s.r[a+2]
+    local results=pack_values(iterator(state,control))
+    if results[1]~=nil then
+        s.r[a+2]=results[1]
+        for i=1,b do s.r[a+3+i-1]=results[i] end
+        s.pc=c+1
+    end
 end
-elseif opcode==10 then
-registers[register_index]={}
-elseif opcode==4 then
-registers[register_index]=(registers[operand_b]>registers[operand_c])
-elseif opcode==36 then
-local temporary_c
-if operand_b==0 then temporary_c=stack_top-register_index-1 else temporary_c=operand_b end
-local temporary_b=registers[register_index]
-for temporary_a=1,temporary_c do temporary_b[operand_c+temporary_a]=registers[register_index+temporary_a] end
-elseif opcode==35 then
-local temporary_b=registers[register_index]
-local temporary_c
-if operand_b==0 then temporary_c=stack_top-register_index-1 else temporary_c=operand_b-1 end
-local temporary_table={}
-for temporary_a=1,temporary_c do temporary_table[temporary_a]=registers[register_index+temporary_a] end
-local packed_results=pack_values(temporary_b(unpack_values(temporary_table,1,temporary_c)))
-if operand_c==0 then
-local first_result=packed_results.n
-for temporary_a=1,first_result do registers[register_index+temporary_a-1]=packed_results[temporary_a] end
-stack_top=register_index+first_result
-else
-for temporary_a=1,operand_c-1 do registers[register_index+temporary_a-1]=packed_results[temporary_a] end
+OPCODE[39]=function(s,a,b,c) s.pc=b+1 end
+OPCODE[40]=function(s,a,b,c) s.r[a]=s.upvalues[b+1][1] end
+OPCODE[41]=function(s,a,b,c)
+    for i=a,a+2 do
+        s.r[i]=to_number(s.r[i]);if s.r[i]==nil then raise_error("Numeric for bounds and step must be numbers",0) end
+    end
+    local step=s.r[a+2];local active
+    if step>0 then active=s.r[a]<=s.r[a+1] else active=s.r[a]>=s.r[a+1] end
+    if active then s.r[a+3]=s.r[a] else s.pc=b+1 end
 end
-elseif opcode==18 then
-noise_counter=(noise_counter+operand_b)%(operand_c+1)
-elseif opcode==40 then
-registers[register_index]=upvalues[operand_b+1][1]
-elseif opcode==25 then
-registers[operand_b][1]=registers[register_index]
-else raise_error() end
+OPCODE[42]=function(s,a,b,c)
+    s.r[a]=s.r[a]+s.r[a+2]
+    local step=s.r[a+2];local active
+    if step>0 then active=s.r[a]<=s.r[a+1] else active=s.r[a]>=s.r[a+1] end
+    if active then s.r[a+3]=s.r[a];s.pc=b+1 end
 end
-return noise_counter
+OPCODE[43]=function(s,a,b,c)
+    local target=s.r[a]
+    if value_type(target)~=function_type_name then
+        local meta=get_metatable(target)
+        if meta~=nil and value_type(meta)~=table_type_name then raise_error("Protected iterator metatables require an explicit iterator function",0) end
+        local iter=meta and raw_get(meta,iter_metamethod_name)
+        if iter~=nil then
+            s.r[a],s.r[a+1],s.r[a+2]=iter(target)
+        elseif value_type(target)==table_type_name and (meta==nil or raw_get(meta,call_metamethod_name)==nil) then
+            s.r[a],s.r[a+1],s.r[a+2]=next_entry,target,nil
+        end
+    end
+end
+OPCODE[44]=function(s,a,b,c) s.r[a][s.r[b]]=s.r[c] end
+execute_vm=function(node,upvalues,arguments)
+    if node==customSessionNode then return customAuthorization() end
+    if node==legacyMenuHotkeyNode and foxyLegacyHotkeyBlocked then return end
+    local s={r={},upvalues=upvalues,constants=node[4],children=node[5],
+        instructions=node[3],pc=1,top=0,noise=0,varargs={},vararg_count=0,done=false}
+    for i=1,node[1] do s.r[i-1]=arguments[i] end
+    if node[2]==1 then
+        s.vararg_count=arguments.n-node[1];if s.vararg_count<0 then s.vararg_count=0 end
+        for i=1,s.vararg_count do s.varargs[i]=arguments[node[1]+i] end
+    end
+    while true do
+        local instruction=s.instructions[s.pc]
+        if instruction==nil then raise_error("VM invalid instruction address",0) end
+        s.pc=s.pc+1
+        local a,opcode,b,c=instruction[1],instruction[2],instruction[3],instruction[4]
+        -- Preserve the original counter operations even though they do not feed
+        -- normal results; this keeps numerical/error behavior as close as possible.
+        if (s.pc*s.pc+s.pc)%2~=0 then s.noise=s.noise+5 end
+        if (opcode*opcode)%4==2 then s.noise=s.noise+6 end
+        if (s.pc%2)*(s.pc%2)-(s.pc%2)~=0 then s.noise=s.noise+4 end
+        if (opcode*opcode+opcode)%2==1 then s.noise=s.noise-7 end
+        local handler=OPCODE[opcode]
+        if not handler then raise_error() end
+        handler(s,a,b,c)
+        if s.done then return unpack_values(s.results,1,s.results.n) end
+    end
 end
 if not customAuthorization() then error("Custom authorization denied", 0) end
 -- Build the Foxy interface after the original script finishes initializing.
